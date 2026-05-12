@@ -3,6 +3,8 @@ package com.example.cv_reranking.competition.entity;
 import jakarta.persistence.*;
 import lombok.*;
 
+import java.time.LocalDate;
+
 @Entity
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
@@ -36,6 +38,10 @@ public class Competition {
     // 접수기간
     @Column(name = "application_period")
     private String applicationPeriod;
+
+    // 접수기간에서 마지막 날짜만 추출한 값
+    @Column(name = "application_end_date")
+    private LocalDate applicationEndDate;
 
     // 총상금
     @Column(name = "total_prize")
