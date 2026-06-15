@@ -1,48 +1,51 @@
 package com.example.cv_reranking.competition.loader;
 
-import com.fasterxml.jackson.annotation.JsonAlias;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Getter;
+
+import java.util.List;
 
 @Getter
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class CompetitionSeedRow {
 
-    @JsonProperty("name")
-    private String name;
+    @JsonProperty("contest_id")
+    private Long contestId;
+
+    @JsonProperty("title")
+    private String title;
+
+    @JsonProperty("domains")
+    private List<String> domains = List.of();
+
+    @JsonProperty("skills")
+    private List<String> skills = List.of();
 
     @JsonProperty("source_url")
     private String sourceUrl;
 
-    @JsonProperty("분야")
-    private String category;
+    @JsonProperty("target")
+    private String target;
 
-    @JsonProperty("응모대상")
-    private String applicationTarget;
+    @JsonProperty("host")
+    private String host;
 
-    @JsonProperty("주최/주관")
-    private String organizer;
+    @JsonProperty("period")
+    private String period;
 
-    @JsonProperty("접수기간")
-    private String applicationPeriod;
-
-    @JsonProperty("총 상금")
+    @JsonProperty("total_prize")
     private String totalPrize;
 
-    @JsonProperty("1등 상금")
+    @JsonProperty("first_prize")
     private String firstPrize;
 
-    @JsonProperty("홈페이지")
+    @JsonProperty("homepage")
     private String homepage;
 
-    @JsonAlias({
-            "공모전 대표 사진",
-            "대표사진",
-            "대표 이미지",
-            "image_url",
-            "poster_url",
-            "thumbnail"
-    })
-    private String representativeImageUrl;
+    @JsonProperty("image_url")
+    private String imageUrl;
+
+    @JsonProperty("description")
+    private String description;
 }

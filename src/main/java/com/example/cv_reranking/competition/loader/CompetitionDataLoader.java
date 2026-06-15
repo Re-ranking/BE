@@ -30,7 +30,7 @@ public class CompetitionDataLoader implements ApplicationRunner {
             return;
         }
 
-        ClassPathResource resource = new ClassPathResource("contests_result.json");
+        ClassPathResource resource = new ClassPathResource("contest_normalize.json");
 
         if (!resource.exists()) {
             return;
@@ -43,21 +43,33 @@ public class CompetitionDataLoader implements ApplicationRunner {
 
         List<Competition> competitions = rows.stream()
                 .map(row -> Competition.builder()
-                        .name(row.getName())
+                        .dlContestId(row.getContestId())
+                        .name(row.getTitle())
                         .sourceUrl(row.getSourceUrl())
-                        .category(row.getCategory())
-                        .applicationTarget(row.getApplicationTarget())
-                        .organizer(row.getOrganizer())
-                        .applicationPeriod(row.getApplicationPeriod())
-                        .applicationEndDate(parseLastDate(row.getApplicationPeriod()))
+                        .category(join(row.getDomains()))
+                        .domains(join(row.getDomains()))
+                        .skills(join(row.getSkills()))
+                        .applicationTarget(row.getTarget())
+                        .organizer(row.getHost())
+                        .applicationPeriod(row.getPeriod())
+                        .applicationEndDate(parseLastDate(row.getPeriod()))
                         .totalPrize(row.getTotalPrize())
                         .firstPrize(row.getFirstPrize())
                         .homepage(row.getHomepage())
-                        .representativeImageUrl(row.getRepresentativeImageUrl())
+                        .representativeImageUrl(row.getImageUrl())
+                        .description(row.getDescription())
                         .build())
                 .toList();
 
         competitionRepository.saveAll(competitions);
+    }
+
+    private String join(List<String> values) {
+        if (values == null || values.isEmpty()) {
+            return "";
+        }
+
+        return String.join(", ", values);
     }
 
     private LocalDate parseLastDate(String applicationPeriod) {

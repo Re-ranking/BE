@@ -28,3 +28,6 @@ aws:
     region: ${AWS_COGNITO_REGION}
     user-pool-id: ${AWS_COGNITO_USER_POOL_ID}
     client-id: ${AWS_COGNITO_CLIENT_ID}
+
+dl:
+  base-url: ${DL_BASE_URL:http://localhost:8000}

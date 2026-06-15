@@ -17,45 +17,47 @@ public class Competition {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    // name
+    @Column(name = "dl_contest_id", unique = true)
+    private Long dlContestId;
+
     @Column(nullable = false, length = 500)
     private String name;
 
-    // source_url
     @Column(name = "source_url", columnDefinition = "TEXT")
     private String sourceUrl;
 
-    // 분야
+    @Column(columnDefinition = "TEXT")
     private String category;
 
-    // 응모대상
-    @Column(name = "application_target")
+    @Column(columnDefinition = "TEXT")
+    private String domains;
+
+    @Column(columnDefinition = "TEXT")
+    private String skills;
+
+    @Column(name = "application_target", columnDefinition = "TEXT")
     private String applicationTarget;
 
-    // 주최/주관
     private String organizer;
 
-    // 접수기간
     @Column(name = "application_period")
     private String applicationPeriod;
 
-    // 접수기간에서 마지막 날짜만 추출한 값
     @Column(name = "application_end_date")
     private LocalDate applicationEndDate;
 
-    // 총상금
     @Column(name = "total_prize")
     private String totalPrize;
 
-    // 1등 상금
     @Column(name = "first_prize")
     private String firstPrize;
 
-    // 홈페이지
     @Column(columnDefinition = "TEXT")
     private String homepage;
 
-    // 공모전 대표 사진
     @Column(name = "representative_image_url", columnDefinition = "TEXT")
     private String representativeImageUrl;
+
+    @Column(columnDefinition = "TEXT")
+    private String description;
 }
