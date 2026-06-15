@@ -5,8 +5,7 @@ import lombok.Getter;
 
 @Getter
 @Builder
-public class AuthResponse {
-
+public class SignupResponse {
     private Long memberId;
     private String email;
     private String name;
