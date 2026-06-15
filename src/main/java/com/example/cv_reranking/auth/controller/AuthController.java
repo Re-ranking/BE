@@ -16,27 +16,24 @@ public class AuthController {
     private final AuthService authService;
 
     @PostMapping("/signup")
-    public ApiResponse<AuthResponse> signup(@RequestBody SignupRequest request) {
+    public ApiResponse<SignupResponse> signup(@RequestBody SignupRequest request) {
         return ApiResponse.success("회원가입 성공", authService.signup(request));
     }
 
-    // 지금: 세션 방식
     @PostMapping("/login")
-    public ApiResponse<AuthResponse> login(
-            @RequestBody LoginRequest request,
-            HttpSession session
-    ) {
-        Member member = authService.authenticate(request);
-
-        session.setAttribute("memberId", member.getId());
-
-        return ApiResponse.success("로그인 성공",
-                authService.toResponse(member, null));
+    public ApiResponse<LoginResponse> login(@RequestBody LoginRequest request) {
+        return ApiResponse.success("로그인 성공", authService.login(request));
     }
 
     @PostMapping("/logout")
-    public ApiResponse<Void> logout(HttpSession session) {
-        session.invalidate();
+    public ApiResponse<Void> logout(@RequestHeader("Authorization") String authorizationHeader) {
+        authService.logout(authorizationHeader);
         return ApiResponse.success("로그아웃 성공");
+    }
+
+    @PostMapping("/confirm")
+    public ApiResponse<Void> confirmSignup(@RequestBody ConfirmSignupRequest request) {
+        authService.confirmSignup(request);
+        return ApiResponse.success("이메일 인증 성공");
     }
 }
