@@ -67,4 +67,12 @@ public class MypageProfile {
         if (projects != null) this.projects = new ArrayList<>(projects);
         if (awards != null) this.awards = new ArrayList<>(awards);
     }
+
+    public void updateSkills(List<String> skills) {
+        this.skills.clear();
+
+        if (skills != null) {
+            this.skills.addAll(skills);
+        }
+    }
 }

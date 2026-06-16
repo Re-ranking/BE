@@ -31,3 +31,4 @@ aws:
 
 dl:
   base-url: ${DL_BASE_URL:http://localhost:8000}
+  personality-path: ${DL_PERSONALITY_PATH:/personality/train}
