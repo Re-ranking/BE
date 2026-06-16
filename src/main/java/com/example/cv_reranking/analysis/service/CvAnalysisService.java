@@ -20,6 +20,7 @@ public class CvAnalysisService {
     private final DlClient dlClient;
     private final CompetitionRepository competitionRepository;
     private final CompetitionRecommendationService recommendationService;
+    private final CvAnalysisStorageService cvAnalysisStorageService;
 
     public CvAnalyzeResponse analyzeCv(MultipartFile file, String loginUserId) {
         if (file == null || file.isEmpty()) {
@@ -34,8 +35,6 @@ public class CvAnalysisService {
 
         JsonNode firstUser = dlResult.get(0);
         JsonNode recommendationNodes = firstUser.path("recommendations");
-
-        String userId = firstUser.path("user_id").asText();
 
         List<String> skills = extractFirstRecommendationArray(recommendationNodes, "cv_skills");
         List<String> domains = extractFirstRecommendationArray(recommendationNodes, "cv_domains");
@@ -52,6 +51,7 @@ public class CvAnalysisService {
                 makeRecommendations(recommendationNodes);
 
         recommendationService.replaceRecommendations(loginUserId, recommendations);
+        cvAnalysisStorageService.saveLatest(loginUserId, firstUser.path("name").asText(), cvAnalysis);
 
         return new CvAnalyzeResponse(
                 loginUserId,
