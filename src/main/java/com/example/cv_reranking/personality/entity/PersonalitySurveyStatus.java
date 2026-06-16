@@ -1,4 +1,6 @@
 package com.example.cv_reranking.personality.entity;
 
-public class PersonalitySurveyStatus {
+public enum PersonalitySurveyStatus {
+    DRAFT,
+    SUBMITTED
 }

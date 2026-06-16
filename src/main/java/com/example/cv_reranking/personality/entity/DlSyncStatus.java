@@ -1,4 +1,8 @@
 package com.example.cv_reranking.personality.entity;
 
-public class DlSyncStatus {
+public enum DlSyncStatus {
+    NOT_REQUESTED,
+    PENDING,
+    SUCCESS,
+    FAILED
 }
