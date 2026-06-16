@@ -26,7 +26,7 @@ public record MypageCvResponse(
                 profile.getMajor(),
                 profile.getProfileImage(),
                 profile.getIntroduction(),
-                analysis.getSkills(),
+                profile.getSkills(),
                 analysis.getPrimaryDomains(),
                 analysis.getStrengths().stream().map(ScoreItem::from).toList(),
                 analysis.getWeaknesses().stream().map(ScoreItem::from).toList(),

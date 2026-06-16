@@ -33,6 +33,15 @@ public class MypageService {
         MypageProfile profile = getOrCreateProfile(jwt);
         CvAnalysisRecord analysis = cvAnalysisStorageService.getLatest(jwt.getSubject());
 
+        if (profile.getSkills().isEmpty() && analysis.getSkills() != null && !analysis.getSkills().isEmpty()) {
+            profile.updateCv(
+                    analysis.getSkills(),
+                    null,
+                    null,
+                    null
+            );
+        }
+
         return MypageCvResponse.from(profile, analysis);
     }
 
@@ -122,7 +131,7 @@ public class MypageService {
                 .name(member != null ? member.getName() : jwt.getClaimAsString("name"))
                 .major(member != null ? member.getMajor() : "")
                 .profileImage(member != null ? member.getProfileImage() : "")
-                .introduction("")
+                .introduction(member != null ? member.getDescription() : "")
                 .build();
     }
 }

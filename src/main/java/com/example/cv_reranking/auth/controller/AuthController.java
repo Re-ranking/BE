@@ -1,12 +1,12 @@
 package com.example.cv_reranking.auth.controller;
 
 import com.example.cv_reranking.auth.dto.*;
-import com.example.cv_reranking.auth.entity.Member;
 import com.example.cv_reranking.auth.service.AuthService;
 import com.example.cv_reranking.global.response.ApiResponse;
-import jakarta.servlet.http.HttpSession;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 @RestController
 @RequestMapping("/api/auth")
@@ -15,9 +15,17 @@ public class AuthController {
 
     private final AuthService authService;
 
-    @PostMapping("/signup")
-    public ApiResponse<SignupResponse> signup(@RequestBody SignupRequest request) {
-        return ApiResponse.success("회원가입 성공", authService.signup(request));
+    @PostMapping(value = "/signup", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ApiResponse<SignupResponse> signup(
+            @RequestPart("email") String email,
+            @RequestPart("password") String password,
+            @RequestPart("name") String name,
+            @RequestPart("major") String major,
+            @RequestPart(value = "description", required = false) String description,
+            @RequestPart(value = "profileImage", required = false) MultipartFile profileImage
+    ) {
+        SignupRequest request = new SignupRequest(email, password, name, major, description);
+        return ApiResponse.success("회원가입 성공", authService.signup(request, profileImage));
     }
 
     @PostMapping("/login")
