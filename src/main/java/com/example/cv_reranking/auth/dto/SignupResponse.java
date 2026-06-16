@@ -11,4 +11,5 @@ public class SignupResponse {
     private String name;
     private String major;
     private String profileImage;
+    private String description;
 }

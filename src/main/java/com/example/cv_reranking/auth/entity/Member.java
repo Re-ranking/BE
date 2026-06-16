@@ -28,4 +28,10 @@ public class Member {
 
     @Column(length = 500)
     private String profileImage;
+
+    @Column(nullable = false, unique = true, length = 100)
+    private String cognitoSub;
+
+    @Column(length = 100)
+    private String description;
 }

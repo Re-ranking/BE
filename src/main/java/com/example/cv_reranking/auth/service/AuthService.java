@@ -7,10 +7,17 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 import software.amazon.awssdk.services.cognitoidentityprovider.CognitoIdentityProviderClient;
 import software.amazon.awssdk.services.cognitoidentityprovider.model.*;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.Map;
+import java.util.UUID;
+import java.nio.file.StandardCopyOption;
 
 @Service
 @RequiredArgsConstructor
@@ -24,7 +31,7 @@ public class AuthService {
     private String clientId;
 
     @Transactional
-    public SignupResponse signup(SignupRequest request) {
+    public SignupResponse signup(SignupRequest request, MultipartFile profileImage) {
         if (memberRepository.existsByEmail(request.getEmail())) {
             throw new IllegalArgumentException("이미 가입된 이메일");
         }
@@ -41,14 +48,18 @@ public class AuthService {
                 )
                 .build();
 
-        cognitoClient.signUp(cognitoRequest);
+        SignUpResponse cognitoResponse = cognitoClient.signUp(cognitoRequest);
+
+        String profileImageUrl = saveProfileImage(profileImage);
 
         Member member = memberRepository.save(Member.builder()
                 .email(request.getEmail())
                 .password("COGNITO")
                 .name(request.getName())
                 .major(request.getMajor())
-                .profileImage(request.getProfileImage())
+                .profileImage(profileImageUrl)
+                .cognitoSub(cognitoResponse.userSub())
+                .description(request.getDescription())
                 .build());
 
         return SignupResponse.builder()
@@ -57,6 +68,7 @@ public class AuthService {
                 .name(member.getName())
                 .major(member.getMajor())
                 .profileImage(member.getProfileImage())
+                .description(member.getDescription())
                 .build();
     }
 
@@ -95,5 +107,40 @@ public class AuthService {
                 .build();
 
         cognitoClient.globalSignOut(request);
+    }
+
+    private String saveProfileImage(MultipartFile profileImage) {
+        if (profileImage == null || profileImage.isEmpty()) {
+            return null;
+        }
+
+        try {
+            String originalFilename = profileImage.getOriginalFilename();
+            String extension = "";
+
+            if (originalFilename != null && originalFilename.contains(".")) {
+                extension = originalFilename.substring(originalFilename.lastIndexOf("."));
+            }
+
+            String savedFileName = UUID.randomUUID() + extension;
+
+            Path uploadPath = Paths.get(System.getProperty("user.dir"), "uploads", "profile")
+                    .toAbsolutePath()
+                    .normalize();
+
+            Files.createDirectories(uploadPath);
+
+            Path filePath = uploadPath.resolve(savedFileName);
+
+            Files.copy(
+                    profileImage.getInputStream(),
+                    filePath,
+                    StandardCopyOption.REPLACE_EXISTING
+            );
+
+            return "/uploads/profile/" + savedFileName;
+        } catch (IOException e) {
+            throw new IllegalArgumentException("프로필 이미지 저장에 실패했습니다: " + e.getMessage(), e);
+        }
     }
 }
