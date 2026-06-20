@@ -21,6 +21,9 @@ public class DlClient {
     @Value("${dl.base-url}")
     private String dlBaseUrl;
 
+    @Value("${dl.cv-recommend-path:/recommend}")
+    private String cvRecommendPath;
+
     public JsonNode analyzeCv(MultipartFile file) {
         try {
             LinkedMultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
@@ -31,7 +34,7 @@ public class DlClient {
             ));
 
             return restClient.post()
-                    .uri(dlBaseUrl + "/recommend")
+                    .uri(dlBaseUrl + cvRecommendPath)
                     .contentType(MediaType.MULTIPART_FORM_DATA)
                     .body(body)
                     .retrieve()

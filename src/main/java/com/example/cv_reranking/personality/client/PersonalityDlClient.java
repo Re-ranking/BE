@@ -17,14 +17,14 @@ public class PersonalityDlClient {
     @Value("${dl.base-url}")
     private String dlBaseUrl;
 
-    @Value("${dl.personality-train-path:/personality/train}")
-    private String personalityTrainPath;
+    @Value("${dl.personality-path:/personality/train}")
+    private String personalityPath;
 
     @Value("${dl.personality-recommend-path:/personality/recommend}")
     private String personalityRecommendPath;
 
     public void sendPersonalitySurvey(PersonalitySurveyResponse response) {
-        String url = dlBaseUrl + personalityTrainPath;
+        String url = dlBaseUrl + personalityPath;
         ResponseEntity<Void> dlResponse = restTemplate.postForEntity(url, response, Void.class);
 
         if (!dlResponse.getStatusCode().is2xxSuccessful()) {
