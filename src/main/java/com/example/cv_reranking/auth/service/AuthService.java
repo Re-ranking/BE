@@ -3,6 +3,7 @@ package com.example.cv_reranking.auth.service;
 import com.example.cv_reranking.auth.dto.*;
 import com.example.cv_reranking.auth.entity.Member;
 import com.example.cv_reranking.auth.repository.MemberRepository;
+import com.example.cv_reranking.global.storage.FileStorageService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -11,13 +12,7 @@ import org.springframework.web.multipart.MultipartFile;
 import software.amazon.awssdk.services.cognitoidentityprovider.CognitoIdentityProviderClient;
 import software.amazon.awssdk.services.cognitoidentityprovider.model.*;
 
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.Map;
-import java.util.UUID;
-import java.nio.file.StandardCopyOption;
 
 @Service
 @RequiredArgsConstructor
@@ -26,6 +21,7 @@ public class AuthService {
 
     private final MemberRepository memberRepository;
     private final CognitoIdentityProviderClient cognitoClient;
+    private final FileStorageService fileStorageService;
 
     @Value("${aws.cognito.client-id}")
     private String clientId;
@@ -50,7 +46,10 @@ public class AuthService {
 
         SignUpResponse cognitoResponse = cognitoClient.signUp(cognitoRequest);
 
-        String profileImageUrl = saveProfileImage(profileImage);
+        String profileImageUrl = fileStorageService.saveProfileImage(
+                cognitoResponse.userSub(),
+                profileImage
+        );
 
         Member member = memberRepository.save(Member.builder()
                 .email(request.getEmail())
@@ -107,40 +106,5 @@ public class AuthService {
                 .build();
 
         cognitoClient.globalSignOut(request);
-    }
-
-    private String saveProfileImage(MultipartFile profileImage) {
-        if (profileImage == null || profileImage.isEmpty()) {
-            return null;
-        }
-
-        try {
-            String originalFilename = profileImage.getOriginalFilename();
-            String extension = "";
-
-            if (originalFilename != null && originalFilename.contains(".")) {
-                extension = originalFilename.substring(originalFilename.lastIndexOf("."));
-            }
-
-            String savedFileName = UUID.randomUUID() + extension;
-
-            Path uploadPath = Paths.get(System.getProperty("user.dir"), "uploads", "profile")
-                    .toAbsolutePath()
-                    .normalize();
-
-            Files.createDirectories(uploadPath);
-
-            Path filePath = uploadPath.resolve(savedFileName);
-
-            Files.copy(
-                    profileImage.getInputStream(),
-                    filePath,
-                    StandardCopyOption.REPLACE_EXISTING
-            );
-
-            return "/uploads/profile/" + savedFileName;
-        } catch (IOException e) {
-            throw new IllegalArgumentException("프로필 이미지 저장에 실패했습니다: " + e.getMessage(), e);
-        }
     }
 }

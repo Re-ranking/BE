@@ -48,4 +48,9 @@ public class CvAnalysisStorageService {
         return repository.findByUserKey(userKey)
                 .orElseThrow(() -> new IllegalArgumentException("저장된 CV 분석 결과가 없습니다."));
     }
+
+    @Transactional(readOnly = true)
+    public CvAnalysisRecord getLatestOrNull(String userKey) {
+        return repository.findByUserKey(userKey).orElse(null);
+    }
 }

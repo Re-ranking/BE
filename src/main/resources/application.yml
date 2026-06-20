@@ -1,9 +1,12 @@
+server:
+  port: ${SERVER_PORT:8080}
+
 spring:
   config:
     import: optional:file:.env[.properties]
 
   datasource:
-    url: jdbc:mysql://localhost:3306/cv_reranking?serverTimezone=Asia/Seoul&characterEncoding=UTF-8
+    url: ${DB_URL:jdbc:mysql://127.0.0.1:3306/cv_reranking?serverTimezone=Asia/Seoul&characterEncoding=UTF-8&useSSL=false&allowPublicKeyRetrieval=true}
     username: ${DB_USERNAME}
     password: ${DB_PASSWORD}
     driver-class-name: com.mysql.cj.jdbc.Driver
@@ -12,6 +15,11 @@ spring:
     hibernate:
       ddl-auto: update
     show-sql: true
+
+  servlet:
+    multipart:
+      max-file-size: 20MB
+      max-request-size: 20MB
 
   security:
     oauth2:
@@ -30,5 +38,13 @@ aws:
     client-id: ${AWS_COGNITO_CLIENT_ID}
 
 dl:
-  base-url: ${DL_BASE_URL:http://localhost:8000}
+  base-url: ${DL_BASE_URL:http://127.0.0.1:8000}
+  cv-recommend-path: ${DL_CV_RECOMMEND_PATH:/recommend}
   personality-path: ${DL_PERSONALITY_PATH:/personality/train}
+  personality-recommend-path: ${DL_PERSONALITY_RECOMMEND_PATH:/personality/recommend}
+
+storage:
+  type: ${STORAGE_TYPE:local}
+
+file:
+  upload-dir: ${FILE_UPLOAD_DIR:/home/ubuntu/cv-reranking/uploads}
