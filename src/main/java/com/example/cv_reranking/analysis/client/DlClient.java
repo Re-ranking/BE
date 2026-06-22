@@ -162,6 +162,6 @@ public class DlClient {
             extension = ".pdf";
         }
 
-        return "uploaded-cv" + extension;
+        return "uploaded-cv-" + UUID.randomUUID() + extension;
     }
 }
