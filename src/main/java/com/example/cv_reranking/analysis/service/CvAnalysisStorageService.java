@@ -19,11 +19,21 @@ public class CvAnalysisStorageService {
     @Transactional
     public void saveLatest(String userKey, String extractedName, CvAnalyzeResponse.CvAnalysis cvAnalysis) {
         List<CvAnalysisScoreItem> strengths = cvAnalysis.strengths().stream()
-                .map(score -> new CvAnalysisScoreItem(score.name(), score.score()))
+                .map(score -> new CvAnalysisScoreItem(
+                        score.name(),
+                        score.score(),
+                        score.averageScore(),
+                        score.difference()
+                ))
                 .toList();
 
         List<CvAnalysisScoreItem> weaknesses = cvAnalysis.weaknesses().stream()
-                .map(score -> new CvAnalysisScoreItem(score.name(), score.score()))
+                .map(score -> new CvAnalysisScoreItem(
+                        score.name(),
+                        score.score(),
+                        score.averageScore(),
+                        score.difference()
+                ))
                 .toList();
 
         CvAnalysisRecord record = repository.findByUserKey(userKey)

@@ -13,4 +13,8 @@ public class CvAnalysisScoreItem {
     private String name;
 
     private int score;
+
+    private int averageScore;
+
+    private int difference;
 }

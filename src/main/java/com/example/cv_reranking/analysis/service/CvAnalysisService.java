@@ -2,6 +2,8 @@ package com.example.cv_reranking.analysis.service;
 
 import com.example.cv_reranking.analysis.client.DlClient;
 import com.example.cv_reranking.analysis.dto.CvAnalyzeResponse;
+import com.example.cv_reranking.analysis.entity.CvAnalysisRecord;
+import com.example.cv_reranking.analysis.entity.CvAnalysisScoreItem;
 import com.example.cv_reranking.competition.entity.Competition;
 import com.example.cv_reranking.competition.repository.CompetitionRepository;
 import com.example.cv_reranking.recommendation.service.CompetitionRecommendationService;
@@ -28,37 +30,116 @@ public class CvAnalysisService {
         }
 
         JsonNode dlResult = dlClient.analyzeCv(file);
+        JsonNode payload = unwrapDlData(dlResult);
+        JsonNode firstUser = resolveFirstUser(payload);
+        JsonNode recommendationNodes = resolveRecommendationNodes(payload, firstUser);
 
-        if (dlResult == null || !dlResult.isArray() || dlResult.isEmpty()) {
-            throw new IllegalStateException("DL 분석 결과가 비어 있습니다.");
-        }
+        List<String> skills = firstNonEmpty(
+                extractStringArray(firstUser, "cv_skills", "cvSkills", "skills"),
+                extractFirstRecommendationArray(recommendationNodes, "cv_skills", "cvSkills", "skills")
+        );
 
-        JsonNode firstUser = dlResult.get(0);
-        JsonNode recommendationNodes = firstUser.path("recommendations");
-
-        List<String> skills = extractFirstRecommendationArray(recommendationNodes, "cv_skills");
-        List<String> domains = extractFirstRecommendationArray(recommendationNodes, "cv_domains");
+        List<String> domains = firstNonEmpty(
+                extractStringArray(firstUser, "cv_domains", "cvDomains", "primaryDomains", "domains"),
+                extractFirstRecommendationArray(recommendationNodes, "cv_domains", "cvDomains", "primaryDomains", "domains")
+        );
 
         CvAnalyzeResponse.CvAnalysis cvAnalysis = new CvAnalyzeResponse.CvAnalysis(
                 makeSummary(domains, skills),
                 skills,
                 domains,
-                makeStrengths(skills, domains),
-                makeWeaknesses(skills)
+                makeStrengths(),
+                makeWeaknesses()
         );
 
         List<CvAnalyzeResponse.RecommendedCompetition> recommendations =
                 makeRecommendations(recommendationNodes);
 
         recommendationService.replaceRecommendations(loginUserId, recommendations);
-        cvAnalysisStorageService.saveLatest(loginUserId, firstUser.path("name").asText(), cvAnalysis);
+        cvAnalysisStorageService.saveLatest(loginUserId, firstUser.path("name").asText(""), cvAnalysis);
 
         return new CvAnalyzeResponse(
                 loginUserId,
-                firstUser.path("name").asText(),
+                firstUser.path("name").asText(""),
                 cvAnalysis,
                 recommendations
         );
+    }
+
+    public CvAnalyzeResponse getLatestAnalysis(String loginUserId) {
+        CvAnalysisRecord record = cvAnalysisStorageService.getLatest(loginUserId);
+
+        CvAnalyzeResponse.CvAnalysis cvAnalysis = new CvAnalyzeResponse.CvAnalysis(
+                record.getSummary(),
+                safeList(record.getSkills()),
+                safeList(record.getPrimaryDomains()),
+                toAnalysisScores(record.getStrengths()),
+                toAnalysisScores(record.getWeaknesses())
+        );
+
+        return new CvAnalyzeResponse(
+                loginUserId,
+                record.getExtractedName(),
+                cvAnalysis,
+                List.of()
+        );
+    }
+
+    private JsonNode unwrapDlData(JsonNode dlResult) {
+        if (dlResult == null || dlResult.isNull() || dlResult.isMissingNode()) {
+            throw new IllegalStateException("DL 분석 결과가 비어 있습니다.");
+        }
+
+        JsonNode payload = dlResult.has("data") ? dlResult.path("data") : dlResult;
+
+        if (payload == null || payload.isNull() || payload.isMissingNode()) {
+            throw new IllegalStateException("DL 분석 결과의 data가 비어 있습니다.");
+        }
+
+        return payload;
+    }
+
+    private JsonNode resolveFirstUser(JsonNode payload) {
+        if (payload.isArray()) {
+            if (payload.isEmpty()) {
+                throw new IllegalStateException("DL 분석 결과 data 배열이 비어 있습니다.");
+            }
+            return payload.get(0);
+        }
+
+        if (payload.isObject()) {
+            JsonNode users = payload.path("users");
+            if (users.isArray() && !users.isEmpty()) {
+                return users.get(0);
+            }
+
+            JsonNode results = payload.path("results");
+            if (results.isArray() && !results.isEmpty()) {
+                return results.get(0);
+            }
+
+            return payload;
+        }
+
+        throw new IllegalStateException("지원하지 않는 DL 분석 결과 형식입니다.");
+    }
+
+    private JsonNode resolveRecommendationNodes(JsonNode payload, JsonNode firstUser) {
+        JsonNode userRecommendations = firstUser.path("recommendations");
+        if (userRecommendations.isArray()) {
+            return userRecommendations;
+        }
+
+        JsonNode payloadRecommendations = payload.path("recommendations");
+        if (payloadRecommendations.isArray()) {
+            return payloadRecommendations;
+        }
+
+        if (payload.isArray()) {
+            return payload;
+        }
+
+        return userRecommendations;
     }
 
     private List<CvAnalyzeResponse.RecommendedCompetition> makeRecommendations(JsonNode recommendationNodes) {
@@ -69,40 +150,62 @@ public class CvAnalysisService {
         }
 
         recommendationNodes.forEach(node -> {
-            Long dlContestId = node.path("contest_id").asLong();
+            Long dlContestId = readLong(node, "contest_id", "contestId", "dlContestId");
 
-            Competition competition = competitionRepository.findByDlContestId(dlContestId)
-                    .orElse(null);
+            Competition competition = dlContestId == null
+                    ? null
+                    : competitionRepository.findByDlContestId(dlContestId).orElse(null);
 
             recommendations.add(new CvAnalyzeResponse.RecommendedCompetition(
                     competition != null ? competition.getId() : null,
                     dlContestId,
-                    competition != null ? competition.getName() : node.path("title").asText(),
-                    toPercent(node.path("final_score").asDouble()),
-                    toPercent(node.path("domain_score").asDouble()),
-                    toPercent(node.path("skill_score").asDouble()),
-                    competition != null ? competition.getCategory() : "",
-                    competition != null ? competition.getApplicationTarget() : "",
-                    competition != null ? competition.getOrganizer() : "",
-                    competition != null ? competition.getApplicationPeriod() : "",
-                    competition != null ? competition.getRepresentativeImageUrl() : ""
+                    competition != null ? competition.getName() : readText(node, "title", "name", "contestName"),
+                    toPercent(readDouble(node, "final_score", "finalScore", "score")),
+                    toPercent(readDouble(node, "domain_score", "domainScore")),
+                    toPercent(readDouble(node, "skill_score", "skillScore")),
+                    competition != null ? nullToEmpty(competition.getCategory()) : "",
+                    competition != null ? nullToEmpty(competition.getApplicationTarget()) : "",
+                    competition != null ? nullToEmpty(competition.getOrganizer()) : "",
+                    competition != null ? nullToEmpty(competition.getApplicationPeriod()) : "",
+                    competition != null ? nullToEmpty(competition.getRepresentativeImageUrl()) : ""
             ));
         });
 
         return recommendations;
     }
 
-    private List<String> extractFirstRecommendationArray(JsonNode recommendationNodes, String fieldName) {
-        List<String> values = new ArrayList<>();
-
+    private List<String> extractFirstRecommendationArray(JsonNode recommendationNodes, String... fieldNames) {
         if (recommendationNodes == null || !recommendationNodes.isArray() || recommendationNodes.isEmpty()) {
-            return values;
+            return List.of();
         }
 
-        recommendationNodes.get(0).path(fieldName)
-                .forEach(value -> values.add(value.asText()));
+        return extractStringArray(recommendationNodes.get(0), fieldNames);
+    }
 
-        return values;
+    private List<String> extractStringArray(JsonNode node, String... fieldNames) {
+        if (node == null || node.isNull() || node.isMissingNode()) {
+            return List.of();
+        }
+
+        for (String fieldName : fieldNames) {
+            JsonNode target = node.path(fieldName);
+
+            if (target.isArray()) {
+                List<String> values = new ArrayList<>();
+                target.forEach(value -> {
+                    if (!value.asText("").isBlank()) {
+                        values.add(value.asText());
+                    }
+                });
+                return values;
+            }
+
+            if (target.isTextual() && !target.asText().isBlank()) {
+                return List.of(target.asText());
+            }
+        }
+
+        return List.of();
     }
 
     private String makeSummary(List<String> domains, List<String> skills) {
@@ -112,38 +215,101 @@ public class CvAnalysisService {
         return domainText + " 분야를 중심으로 " + skillText + " 역량을 보유한 지원자입니다.";
     }
 
-    private List<CvAnalyzeResponse.AnalysisScore> makeStrengths(List<String> skills, List<String> domains) {
-        int technicalScore = Math.min(95, 45 + skills.size() * 10);
-        int problemSolvingScore = Math.min(90, 35 + domains.size() * 12);
-        int projectScore = skills.contains("Python") || skills.contains("Java") ? 65 : 45;
-        int communicationScore = 40;
-
+    private List<CvAnalyzeResponse.AnalysisScore> makeStrengths() {
         return List.of(
-                new CvAnalyzeResponse.AnalysisScore("기술적 전문성", technicalScore),
-                new CvAnalyzeResponse.AnalysisScore("문제 해결력", problemSolvingScore),
-                new CvAnalyzeResponse.AnalysisScore("프로젝트 관리", projectScore),
-                new CvAnalyzeResponse.AnalysisScore("커뮤니케이션", communicationScore)
+                new CvAnalyzeResponse.AnalysisScore("기술적 전문성", 48, 20, 28),
+                new CvAnalyzeResponse.AnalysisScore("문제 해결력", 27, 16, 11),
+                new CvAnalyzeResponse.AnalysisScore("프로젝트 관리", 15, 8, 7),
+                new CvAnalyzeResponse.AnalysisScore("커뮤니케이션", 10, 6, 4)
         );
     }
 
-    private List<CvAnalyzeResponse.AnalysisScore> makeWeaknesses(List<String> skills) {
-        List<CvAnalyzeResponse.AnalysisScore> weaknesses = new ArrayList<>();
-
-        if (!skills.contains("AI") && !skills.contains("Machine Learning") && !skills.contains("Deep Learning")) {
-            weaknesses.add(new CvAnalyzeResponse.AnalysisScore("AI 실무 경험", 35));
-        }
-
-        if (!skills.contains("React") && !skills.contains("Spring Boot")) {
-            weaknesses.add(new CvAnalyzeResponse.AnalysisScore("협업 및 영향력", 40));
-        }
-
-        weaknesses.add(new CvAnalyzeResponse.AnalysisScore("발표", 45));
-        weaknesses.add(new CvAnalyzeResponse.AnalysisScore("원격 협업", 42));
-
-        return weaknesses;
+    private List<CvAnalyzeResponse.AnalysisScore> makeWeaknesses() {
+        return List.of(
+                new CvAnalyzeResponse.AnalysisScore("시간 관리", 10, 6, -4),
+                new CvAnalyzeResponse.AnalysisScore("협상 및 영향력", 10, 6, -4),
+                new CvAnalyzeResponse.AnalysisScore("발표", 10, 6, -4),
+                new CvAnalyzeResponse.AnalysisScore("원격 협업", 10, 6, -4)
+        );
     }
 
-    private int toPercent(double score) {
-        return (int) Math.round(score * 100);
+    private List<CvAnalyzeResponse.AnalysisScore> toAnalysisScores(List<CvAnalysisScoreItem> items) {
+        if (items == null) {
+            return List.of();
+        }
+
+        return items.stream()
+                .map(item -> new CvAnalyzeResponse.AnalysisScore(
+                        item.getName(),
+                        item.getScore(),
+                        item.getAverageScore(),
+                        item.getDifference()
+                ))
+                .toList();
+    }
+
+    private List<String> firstNonEmpty(List<String> first, List<String> second) {
+        return first == null || first.isEmpty() ? safeList(second) : first;
+    }
+
+    private <T> List<T> safeList(List<T> values) {
+        return values == null ? List.of() : values;
+    }
+
+    private Long readLong(JsonNode node, String... fieldNames) {
+        for (String fieldName : fieldNames) {
+            JsonNode value = node.path(fieldName);
+            if (value.isIntegralNumber()) {
+                return value.asLong();
+            }
+            if (value.isTextual() && !value.asText().isBlank()) {
+                try {
+                    return Long.parseLong(value.asText());
+                } catch (NumberFormatException ignored) {
+                    return null;
+                }
+            }
+        }
+        return null;
+    }
+
+    private Double readDouble(JsonNode node, String... fieldNames) {
+        for (String fieldName : fieldNames) {
+            JsonNode value = node.path(fieldName);
+            if (value.isNumber()) {
+                return value.asDouble();
+            }
+            if (value.isTextual() && !value.asText().isBlank()) {
+                try {
+                    return Double.parseDouble(value.asText());
+                } catch (NumberFormatException ignored) {
+                    return null;
+                }
+            }
+        }
+        return null;
+    }
+
+    private String readText(JsonNode node, String... fieldNames) {
+        for (String fieldName : fieldNames) {
+            String value = node.path(fieldName).asText("");
+            if (!value.isBlank()) {
+                return value;
+            }
+        }
+        return "";
+    }
+
+    private int toPercent(Double score) {
+        if (score == null) {
+            return 0;
+        }
+
+        int percent = score <= 1.0 ? (int) Math.round(score * 100) : (int) Math.round(score);
+        return Math.max(0, Math.min(100, percent));
+    }
+
+    private String nullToEmpty(String value) {
+        return value == null ? "" : value;
     }
 }
