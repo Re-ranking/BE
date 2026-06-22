@@ -19,7 +19,9 @@ public record CvAnalyzeResponse(
 
     public record AnalysisScore(
             String name,
-            int score
+            int score,
+            int averageScore,
+            int difference
     ) {
     }
 

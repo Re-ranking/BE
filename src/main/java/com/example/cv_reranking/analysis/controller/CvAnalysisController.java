@@ -27,4 +27,12 @@ public class CvAnalysisController {
         String userId = jwt.getSubject();
         return cvAnalysisService.analyzeCv(file, userId);
     }
+
+    @GetMapping("/latest")
+    public CvAnalyzeResponse getLatestCvAnalysis(
+            @AuthenticationPrincipal Jwt jwt
+    ) {
+        String userId = jwt.getSubject();
+        return cvAnalysisService.getLatestAnalysis(userId);
+    }
 }
