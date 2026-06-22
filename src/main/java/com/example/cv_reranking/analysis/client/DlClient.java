@@ -1,29 +1,29 @@
 package com.example.cv_reranking.analysis.client;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.ByteArrayResource;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
+import org.springframework.util.LinkedMultiValueMap;
+import org.springframework.util.MultiValueMap;
+import org.springframework.web.client.RestTemplate;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
-import java.nio.charset.StandardCharsets;
-import java.time.Duration;
+import java.util.List;
 import java.util.UUID;
 
 @Slf4j
 @Component
 public class DlClient {
 
-    private final HttpClient httpClient;
-    private final ObjectMapper objectMapper;
+    private final RestTemplate restTemplate;
 
     @Value("${dl.base-url}")
     private String dlBaseUrl;
@@ -31,11 +31,12 @@ public class DlClient {
     @Value("${dl.cv-recommend-path:/recommend}")
     private String cvRecommendPath;
 
-    public DlClient(ObjectMapper objectMapper) {
-        this.objectMapper = objectMapper;
-        this.httpClient = HttpClient.newBuilder()
-                .connectTimeout(Duration.ofSeconds(10))
-                .build();
+    public DlClient() {
+        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout(10_000);
+        factory.setReadTimeout(300_000);
+
+        this.restTemplate = new RestTemplate(factory);
     }
 
     public JsonNode analyzeCv(MultipartFile file) {
@@ -50,98 +51,72 @@ public class DlClient {
                 throw new IllegalArgumentException("DL로 전송할 CV 파일 byte가 0입니다.");
             }
 
-            String originalFilename = file.getOriginalFilename();
+            MediaType fileContentType = resolveContentType(file);
             String safeFilename = makeSafeFilename(file);
-            String contentType = resolveContentType(file);
-            String boundary = "----CvRerankingBoundary" + UUID.randomUUID();
 
-            byte[] multipartBody = buildMultipartBody(
-                    boundary,
-                    "file",
-                    safeFilename,
-                    contentType,
-                    fileBytes
+            log.info("[DL REQUEST] method=RestTemplate url={}", dlBaseUrl + cvRecommendPath);
+            log.info("[DL REQUEST] originalFilename={}, safeFilename={}, contentType={}, size={}",
+                    file.getOriginalFilename(), safeFilename, fileContentType, fileBytes.length);
+
+            ByteArrayResource fileResource = new ByteArrayResource(fileBytes) {
+                @Override
+                public String getFilename() {
+                    return safeFilename;
+                }
+
+                @Override
+                public long contentLength() {
+                    return fileBytes.length;
+                }
+            };
+
+            HttpHeaders fileHeaders = new HttpHeaders();
+            fileHeaders.setContentDispositionFormData("file", safeFilename);
+            fileHeaders.setContentType(fileContentType);
+            fileHeaders.setContentLength(fileBytes.length);
+
+            HttpEntity<ByteArrayResource> filePart =
+                    new HttpEntity<>(fileResource, fileHeaders);
+
+            MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
+            body.add("file", filePart);
+
+            HttpHeaders requestHeaders = new HttpHeaders();
+            requestHeaders.setContentType(MediaType.MULTIPART_FORM_DATA);
+            requestHeaders.setAccept(List.of(MediaType.APPLICATION_JSON));
+
+            HttpEntity<MultiValueMap<String, Object>> requestEntity =
+                    new HttpEntity<>(body, requestHeaders);
+
+            ResponseEntity<JsonNode> response = restTemplate.postForEntity(
+                    dlBaseUrl + cvRecommendPath,
+                    requestEntity,
+                    JsonNode.class
             );
 
-            String url = dlBaseUrl + cvRecommendPath;
+            log.info("[DL RESPONSE] status={}", response.getStatusCode());
 
-            log.info("[DL REQUEST] url={}", url);
-            log.info("[DL REQUEST] originalFilename={}, safeFilename={}, contentType={}, fileSize={}, multipartBodySize={}",
-                    originalFilename, safeFilename, contentType, fileBytes.length, multipartBody.length);
-
-            HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create(url))
-                    .timeout(Duration.ofMinutes(5))
-                    .header("Content-Type", "multipart/form-data; boundary=" + boundary)
-                    .header("Accept", "application/json")
-                    .POST(HttpRequest.BodyPublishers.ofByteArray(multipartBody))
-                    .build();
-
-            HttpResponse<String> response = httpClient.send(
-                    request,
-                    HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8)
-            );
-
-            log.info("[DL RESPONSE] status={}, bodyLength={}",
-                    response.statusCode(),
-                    response.body() == null ? 0 : response.body().length());
-
-            if (response.statusCode() < 200 || response.statusCode() >= 300) {
-                throw new RuntimeException(
-                        "DL 서버 응답 실패. status=" + response.statusCode() + ", body=" + response.body()
-                );
-            }
-
-            return objectMapper.readTree(response.body());
+            return response.getBody();
 
         } catch (IOException e) {
-            throw new RuntimeException("CV 파일을 읽거나 DL 응답을 파싱하는 중 오류가 발생했습니다.", e);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new RuntimeException("DL 서버 요청이 중단되었습니다.", e);
+            throw new RuntimeException("CV 파일을 읽는 중 오류가 발생했습니다.", e);
         } catch (Exception e) {
             throw new RuntimeException("DL 서버 분석 요청에 실패했습니다.", e);
         }
     }
 
-    private byte[] buildMultipartBody(
-            String boundary,
-            String fieldName,
-            String filename,
-            String contentType,
-            byte[] fileBytes
-    ) throws IOException {
-        String lineBreak = "\r\n";
-
-        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-
-        outputStream.write(("--" + boundary + lineBreak).getBytes(StandardCharsets.UTF_8));
-
-        outputStream.write((
-                "Content-Disposition: form-data; name=\"" + fieldName + "\"; filename=\"" + filename + "\"" + lineBreak
-        ).getBytes(StandardCharsets.UTF_8));
-
-        outputStream.write((
-                "Content-Type: " + contentType + lineBreak
-        ).getBytes(StandardCharsets.UTF_8));
-
-        outputStream.write(lineBreak.getBytes(StandardCharsets.UTF_8));
-        outputStream.write(fileBytes);
-        outputStream.write(lineBreak.getBytes(StandardCharsets.UTF_8));
-
-        outputStream.write(("--" + boundary + "--" + lineBreak).getBytes(StandardCharsets.UTF_8));
-
-        return outputStream.toByteArray();
-    }
-
-    private String resolveContentType(MultipartFile file) {
+    private MediaType resolveContentType(MultipartFile file) {
         String contentType = file.getContentType();
 
         if (contentType == null || contentType.isBlank()) {
-            return MediaType.APPLICATION_OCTET_STREAM_VALUE;
+            return MediaType.APPLICATION_OCTET_STREAM;
         }
 
-        return contentType;
+        try {
+            return MediaType.parseMediaType(contentType);
+        } catch (Exception e) {
+            return MediaType.APPLICATION_OCTET_STREAM;
+        }
     }
 
     private String makeSafeFilename(MultipartFile file) {
