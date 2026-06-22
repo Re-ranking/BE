@@ -241,9 +241,9 @@ public class CvAnalysisService {
         return items.stream()
                 .map(item -> new CvAnalyzeResponse.AnalysisScore(
                         item.getName(),
-                        item.getScore(),
-                        item.getAverageScore(),
-                        item.getDifference()
+                        item.getScore() == null ? 0 : item.getScore(),
+                        item.getAverageScore() == null ? 0 : item.getAverageScore(),
+                        item.getDifference() == null ? 0 : item.getDifference()
                 ))
                 .toList();
     }
