@@ -37,6 +37,12 @@ aws:
     user-pool-id: ${AWS_COGNITO_USER_POOL_ID}
     client-id: ${AWS_COGNITO_CLIENT_ID}
 
+  s3:
+    region: ${AWS_S3_REGION:ap-southeast-2}
+    bucket: ${AWS_S3_BUCKET:cv-reranking-files}
+    profile-prefix: ${AWS_S3_PROFILE_PREFIX:profile}
+    cv-prefix: ${AWS_S3_CV_PREFIX:cv/private}
+
 dl:
   base-url: ${DL_BASE_URL:http://127.0.0.1:8000}
   cv-recommend-path: ${DL_CV_RECOMMEND_PATH:/recommend}
@@ -44,7 +50,7 @@ dl:
   personality-recommend-path: ${DL_PERSONALITY_RECOMMEND_PATH:/personality/recommend}
 
 storage:
-  type: ${STORAGE_TYPE:local}
+  type: ${STORAGE_TYPE:s3}
 
 file:
   upload-dir: ${FILE_UPLOAD_DIR:/home/ubuntu/cv-reranking/uploads}

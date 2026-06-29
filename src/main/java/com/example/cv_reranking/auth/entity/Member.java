@@ -26,7 +26,7 @@ public class Member {
     @Column(nullable = false, length = 100)
     private String major;
 
-    @Column(length = 500)
+    @Column(length = 1000)
     private String profileImage;
 
     @Column(nullable = false, unique = true, length = 100)
