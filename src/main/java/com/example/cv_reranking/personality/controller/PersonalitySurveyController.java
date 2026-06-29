@@ -8,7 +8,10 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 
+@Tag(name = "성향 설문", description = "사용자의 성향 설문 제출 및 팀원 추천 연동 API")
 @RestController
 @RequestMapping("/api/personality-surveys")
 @RequiredArgsConstructor
@@ -26,6 +29,18 @@ public class PersonalitySurveyController {
                 personalitySurveyService.saveDraft(resolveCognitoSub(authentication), request)
         );
     }
+
+    @Operation(
+            summary = "성향 설문 제출",
+            description = """
+                프론트에서 사용자가 입력한 성향 설문 결과를 제출.
+
+                테스트 방법:
+                1. 로그인 후 Swagger 우측 상단 Authorize에 accessToken을 입력.
+                2. Request body의 예시 값을 그대로 사용하거나 선택값만 수정.
+                3. Execute 실행 후 200 응답이면 설문 저장 및 DL 연동 요청이 성공.
+                """
+    )
 
     @PostMapping("/submit")
     public ApiResponse<PersonalitySurveyResponse> submit(
