@@ -83,8 +83,17 @@ public class AuthService {
 
         InitiateAuthResponse response = cognitoClient.initiateAuth(authRequest);
 
+        Member member = memberRepository.findByEmail(request.getEmail())
+                .orElseThrow(() -> new IllegalArgumentException("회원 정보를 찾을 수 없습니다."));
+
         return LoginResponse.builder()
                 .accessToken(response.authenticationResult().accessToken())
+                .memberId(member.getId())
+                .email(member.getEmail())
+                .name(member.getName())
+                .major(member.getMajor())
+                .profileImage(member.getProfileImage())
+                .description(member.getDescription())
                 .build();
     }
 
