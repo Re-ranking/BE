@@ -44,12 +44,50 @@ public class CvAnalysisService {
                 extractFirstRecommendationArray(recommendationNodes, "cv_domains", "cvDomains", "primaryDomains", "domains")
         );
 
+        List<CvAnalyzeResponse.AnalysisScore> strengths = firstNonEmptyScores(
+                extractAnalysisScores(
+                        firstUser,
+                        "strengths",
+                        "cv_strengths",
+                        "cvStrengths",
+                        "strongPoints",
+                        "strong_points"
+                ),
+                extractFirstRecommendationScores(
+                        recommendationNodes,
+                        "strengths",
+                        "cv_strengths",
+                        "cvStrengths",
+                        "strongPoints",
+                        "strong_points"
+                )
+        );
+
+        List<CvAnalyzeResponse.AnalysisScore> weaknesses = firstNonEmptyScores(
+                extractAnalysisScores(
+                        firstUser,
+                        "weaknesses",
+                        "cv_weaknesses",
+                        "cvWeaknesses",
+                        "weakPoints",
+                        "weak_points"
+                ),
+                extractFirstRecommendationScores(
+                        recommendationNodes,
+                        "weaknesses",
+                        "cv_weaknesses",
+                        "cvWeaknesses",
+                        "weakPoints",
+                        "weak_points"
+                )
+        );
+
         CvAnalyzeResponse.CvAnalysis cvAnalysis = new CvAnalyzeResponse.CvAnalysis(
                 makeSummary(domains, skills),
                 skills,
                 domains,
-                makeStrengths(),
-                makeWeaknesses()
+                strengths,
+                weaknesses
         );
 
         List<CvAnalyzeResponse.RecommendedCompetition> recommendations =
@@ -197,6 +235,7 @@ public class CvAnalysisService {
                         values.add(value.asText());
                     }
                 });
+
                 return values;
             }
 
@@ -208,29 +247,144 @@ public class CvAnalysisService {
         return List.of();
     }
 
+    private List<CvAnalyzeResponse.AnalysisScore> extractFirstRecommendationScores(
+            JsonNode recommendationNodes,
+            String... fieldNames
+    ) {
+        if (recommendationNodes == null || !recommendationNodes.isArray() || recommendationNodes.isEmpty()) {
+            return List.of();
+        }
+
+        return extractAnalysisScores(recommendationNodes.get(0), fieldNames);
+    }
+
+    private List<CvAnalyzeResponse.AnalysisScore> extractAnalysisScores(
+            JsonNode node,
+            String... fieldNames
+    ) {
+        if (node == null || node.isNull() || node.isMissingNode()) {
+            return List.of();
+        }
+
+        for (String fieldName : fieldNames) {
+            JsonNode target = node.path(fieldName);
+
+            if (target.isArray()) {
+                List<CvAnalyzeResponse.AnalysisScore> scores = new ArrayList<>();
+
+                target.forEach(item -> {
+                    CvAnalyzeResponse.AnalysisScore score = toAnalysisScore(item);
+                    if (score != null) {
+                        scores.add(score);
+                    }
+                });
+
+                if (!scores.isEmpty()) {
+                    return scores;
+                }
+            }
+
+            if (target.isObject()) {
+                List<CvAnalyzeResponse.AnalysisScore> scores = new ArrayList<>();
+
+                target.fields().forEachRemaining(entry -> {
+                    String name = entry.getKey();
+                    JsonNode value = entry.getValue();
+
+                    if (name == null || name.isBlank()) {
+                        return;
+                    }
+
+                    if (value.isNumber() || value.isTextual()) {
+                        scores.add(new CvAnalyzeResponse.AnalysisScore(
+                                name,
+                                toPercent(readNodeDouble(value)),
+                                0,
+                                0
+                        ));
+                        return;
+                    }
+
+                    if (value.isObject()) {
+                        scores.add(new CvAnalyzeResponse.AnalysisScore(
+                                name,
+                                toPercent(readDouble(value, "score", "value", "point")),
+                                toPercent(readDouble(
+                                        value,
+                                        "averageScore",
+                                        "average_score",
+                                        "avgScore",
+                                        "avg_score",
+                                        "average"
+                                )),
+                                toDifference(readDouble(value, "difference", "diff", "gap"))
+                        ));
+                    }
+                });
+
+                if (!scores.isEmpty()) {
+                    return scores;
+                }
+            }
+        }
+
+        return List.of();
+    }
+
+    private CvAnalyzeResponse.AnalysisScore toAnalysisScore(JsonNode item) {
+        if (item == null || item.isNull() || item.isMissingNode()) {
+            return null;
+        }
+
+        if (item.isTextual()) {
+            String name = item.asText("");
+            if (name.isBlank()) {
+                return null;
+            }
+
+            return new CvAnalyzeResponse.AnalysisScore(name, 0, 0, 0);
+        }
+
+        if (!item.isObject()) {
+            return null;
+        }
+
+        String name = readText(
+                item,
+                "name",
+                "label",
+                "category",
+                "title",
+                "skill",
+                "competency",
+                "competencyName",
+                "competency_name"
+        );
+
+        if (name.isBlank()) {
+            return null;
+        }
+
+        return new CvAnalyzeResponse.AnalysisScore(
+                name,
+                toPercent(readDouble(item, "score", "value", "point")),
+                toPercent(readDouble(
+                        item,
+                        "averageScore",
+                        "average_score",
+                        "avgScore",
+                        "avg_score",
+                        "average"
+                )),
+                toDifference(readDouble(item, "difference", "diff", "gap"))
+        );
+    }
+
     private String makeSummary(List<String> domains, List<String> skills) {
         String domainText = domains.isEmpty() ? "기술" : String.join(", ", domains);
         String skillText = skills.isEmpty() ? "핵심 역량" : String.join(", ", skills);
 
         return domainText + " 분야를 중심으로 " + skillText + " 역량을 보유한 지원자입니다.";
-    }
-
-    private List<CvAnalyzeResponse.AnalysisScore> makeStrengths() {
-        return List.of(
-                new CvAnalyzeResponse.AnalysisScore("기술적 전문성", 48, 20, 28),
-                new CvAnalyzeResponse.AnalysisScore("문제 해결력", 27, 16, 11),
-                new CvAnalyzeResponse.AnalysisScore("프로젝트 관리", 15, 8, 7),
-                new CvAnalyzeResponse.AnalysisScore("커뮤니케이션", 10, 6, 4)
-        );
-    }
-
-    private List<CvAnalyzeResponse.AnalysisScore> makeWeaknesses() {
-        return List.of(
-                new CvAnalyzeResponse.AnalysisScore("시간 관리", 10, 6, -4),
-                new CvAnalyzeResponse.AnalysisScore("협상 및 영향력", 10, 6, -4),
-                new CvAnalyzeResponse.AnalysisScore("발표", 10, 6, -4),
-                new CvAnalyzeResponse.AnalysisScore("원격 협업", 10, 6, -4)
-        );
     }
 
     private List<CvAnalyzeResponse.AnalysisScore> toAnalysisScores(List<CvAnalysisScoreItem> items) {
@@ -252,6 +406,13 @@ public class CvAnalysisService {
         return first == null || first.isEmpty() ? safeList(second) : first;
     }
 
+    private List<CvAnalyzeResponse.AnalysisScore> firstNonEmptyScores(
+            List<CvAnalyzeResponse.AnalysisScore> first,
+            List<CvAnalyzeResponse.AnalysisScore> second
+    ) {
+        return first == null || first.isEmpty() ? safeList(second) : first;
+    }
+
     private <T> List<T> safeList(List<T> values) {
         return values == null ? List.of() : values;
     }
@@ -259,9 +420,11 @@ public class CvAnalysisService {
     private Long readLong(JsonNode node, String... fieldNames) {
         for (String fieldName : fieldNames) {
             JsonNode value = node.path(fieldName);
+
             if (value.isIntegralNumber()) {
                 return value.asLong();
             }
+
             if (value.isTextual() && !value.asText().isBlank()) {
                 try {
                     return Long.parseLong(value.asText());
@@ -270,15 +433,18 @@ public class CvAnalysisService {
                 }
             }
         }
+
         return null;
     }
 
     private Double readDouble(JsonNode node, String... fieldNames) {
         for (String fieldName : fieldNames) {
             JsonNode value = node.path(fieldName);
+
             if (value.isNumber()) {
                 return value.asDouble();
             }
+
             if (value.isTextual() && !value.asText().isBlank()) {
                 try {
                     return Double.parseDouble(value.asText());
@@ -287,16 +453,39 @@ public class CvAnalysisService {
                 }
             }
         }
+
+        return null;
+    }
+
+    private Double readNodeDouble(JsonNode value) {
+        if (value == null || value.isNull() || value.isMissingNode()) {
+            return null;
+        }
+
+        if (value.isNumber()) {
+            return value.asDouble();
+        }
+
+        if (value.isTextual() && !value.asText().isBlank()) {
+            try {
+                return Double.parseDouble(value.asText());
+            } catch (NumberFormatException ignored) {
+                return null;
+            }
+        }
+
         return null;
     }
 
     private String readText(JsonNode node, String... fieldNames) {
         for (String fieldName : fieldNames) {
             String value = node.path(fieldName).asText("");
+
             if (!value.isBlank()) {
                 return value;
             }
         }
+
         return "";
     }
 
@@ -305,8 +494,23 @@ public class CvAnalysisService {
             return 0;
         }
 
-        int percent = score <= 1.0 ? (int) Math.round(score * 100) : (int) Math.round(score);
+        int percent = score <= 1.0
+                ? (int) Math.round(score * 100)
+                : (int) Math.round(score);
+
         return Math.max(0, Math.min(100, percent));
+    }
+
+    private int toDifference(Double difference) {
+        if (difference == null) {
+            return 0;
+        }
+
+        double normalized = Math.abs(difference) <= 1.0
+                ? difference * 100
+                : difference;
+
+        return (int) Math.round(normalized);
     }
 
     private String nullToEmpty(String value) {
