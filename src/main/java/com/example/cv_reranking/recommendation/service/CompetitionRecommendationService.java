@@ -24,18 +24,28 @@ public class CompetitionRecommendationService {
     public void replaceRecommendations(String userId, List<CvAnalyzeResponse.RecommendedCompetition> recommendations) {
         recommendationRepository.deleteByUserId(userId);
 
+        if (recommendations == null || recommendations.isEmpty()) {
+            return;
+        }
+
         List<CompetitionRecommendation> entities = recommendations.stream()
                 .map(recommendation -> {
-                    Competition competition = competitionRepository.findByDlContestId(recommendation.dlContestId())
-                            .orElseGet(() ->
-                                    competitionRepository.findByName(recommendation.title())
-                                            .orElseThrow(() ->
-                                                    new RuntimeException(
-                                                            "Competition not found: " + recommendation.title()
-                                                    )
-                                            )
-                            );
+                    // 1차: dlContestId로 조회
+                    Competition competition = (recommendation.dlContestId() != null)
+                            ? competitionRepository.findByDlContestId(recommendation.dlContestId()).orElse(null)
+                            : null;
 
+                    // 2차: dlContestId가 DB PK(id)일 가능성 고려
+                    if (competition == null && recommendation.dlContestId() != null) {
+                        competition = competitionRepository.findById(recommendation.dlContestId()).orElse(null);
+                    }
+
+                    // 3차: 공모전 제목(title)으로 조회
+                    if (competition == null && recommendation.title() != null && !recommendation.title().isBlank()) {
+                        competition = competitionRepository.findByName(recommendation.title()).orElse(null);
+                    }
+
+                    // 예외를 던져서 롤백시키는 대신, competition이 null이어도 정상 저장
                     return CompetitionRecommendation.builder()
                             .userId(userId)
                             .competition(competition)
