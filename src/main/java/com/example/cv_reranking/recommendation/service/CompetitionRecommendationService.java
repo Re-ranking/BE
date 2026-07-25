@@ -27,7 +27,14 @@ public class CompetitionRecommendationService {
         List<CompetitionRecommendation> entities = recommendations.stream()
                 .map(recommendation -> {
                     Competition competition = competitionRepository.findByDlContestId(recommendation.dlContestId())
-                            .orElse(null);
+                            .orElseGet(() ->
+                                    competitionRepository.findByName(recommendation.title())
+                                            .orElseThrow(() ->
+                                                    new RuntimeException(
+                                                            "Competition not found: " + recommendation.title()
+                                                    )
+                                            )
+                            );
 
                     return CompetitionRecommendation.builder()
                             .userId(userId)
