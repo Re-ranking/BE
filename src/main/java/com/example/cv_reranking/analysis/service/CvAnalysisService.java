@@ -9,12 +9,14 @@ import com.example.cv_reranking.competition.repository.CompetitionRepository;
 import com.example.cv_reranking.recommendation.service.CompetitionRecommendationService;
 import com.fasterxml.jackson.databind.JsonNode;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.ArrayList;
 import java.util.List;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class CvAnalysisService {
@@ -30,6 +32,9 @@ public class CvAnalysisService {
         }
 
         JsonNode dlResult = dlClient.analyzeCv(file);
+
+        log.info("[DL RESPONSE RAW] {}", dlResult != null ? dlResult.toString() : "null");
+
         JsonNode payload = unwrapDlData(dlResult);
         JsonNode firstUser = resolveFirstUser(payload);
         JsonNode recommendationNodes = resolveRecommendationNodes(payload, firstUser);
@@ -180,12 +185,25 @@ public class CvAnalysisService {
         throw new IllegalStateException("지원하지 않는 DL 분석 결과 형식입니다.");
     }
 
+    /**
+     * DL 서버가 '추천 공모전 배열'을 직접 던져주거나 'recommendations' 내부에 던져주는 두 경우 모두 호환 파싱하도록 수정
+     */
     private JsonNode resolveRecommendationNodes(JsonNode payload, JsonNode firstUser) {
+        // 1. DL 응답 payload 자체가 최상위 배열이고, 첫 항목에 contest_id/title 등의 공모전 필드가 있는 경우
+        if (payload.isArray() && !payload.isEmpty()) {
+            JsonNode firstItem = payload.get(0);
+            if (firstItem.has("contest_id") || firstItem.has("contestId") || firstItem.has("title")) {
+                return payload;
+            }
+        }
+
+        // 2. firstUser 내부에 recommendations 필드가 있는 경우
         JsonNode userRecommendations = firstUser.path("recommendations");
         if (userRecommendations.isArray()) {
             return userRecommendations;
         }
 
+        // 3. payload 내부에 recommendations 필드가 있는 경우
         JsonNode payloadRecommendations = payload.path("recommendations");
         if (payloadRecommendations.isArray()) {
             return payloadRecommendations;
@@ -209,27 +227,27 @@ public class CvAnalysisService {
             Long dlContestId = readLong(node, "contest_id", "contestId", "dlContestId");
             String fallbackTitle = readText(node, "title", "name", "contestName");
 
-            // 1차 조회: DL이 넘겨준 dlContestId로 DB의 dl_contest_id 컬럼 조회
+            // 1차: dlContestId로 DB의 dl_contest_id 컬럼 조회
             Competition competition = (dlContestId != null)
                     ? competitionRepository.findByDlContestId(dlContestId).orElse(null)
                     : null;
 
-            // 2차 조회: 실패 시, dlContestId가 DB의 PK(id)일 가능성을 고려해 PK로 조회
+            // 2차: dlContestId가 DB의 PK(id)일 가능성을 고려해 PK로 조회
             if (competition == null && dlContestId != null) {
                 competition = competitionRepository.findById(dlContestId).orElse(null);
             }
 
-            // 3차 조회: DL의 dl_contest_id와 DB의 dl_contest_id가 맞지 않는 문제(예: 3 vs 11) 해결을 위해 공모전 이름으로 조회
+            // 3차: 공모전 제목(title)으로 DB 조회
             if (competition == null && !fallbackTitle.isBlank()) {
                 competition = competitionRepository.findByName(fallbackTitle).orElse(null);
             }
 
-            // 최종 추천 객체 매핑
+            // 최종 DTO 변환
             Long finalCompetitionId = (competition != null) ? competition.getId() : null;
             String finalTitle = (competition != null) ? competition.getName() : fallbackTitle;
             String category = (competition != null) ? nullToEmpty(competition.getCategory()) : readText(node, "category");
             String applicationTarget = (competition != null) ? nullToEmpty(competition.getApplicationTarget()) : readText(node, "applicationTarget", "target");
-            String organizer = (competition != null) ? nullToEmpty(competition.getOrganizer()) : readText(node, "organizer");
+            String organizer = (competition != null) ? nullToEmpty(competition.getOrganizer()) : readText(node, "organizer", "host");
             String applicationPeriod = (competition != null) ? nullToEmpty(competition.getApplicationPeriod()) : readText(node, "applicationPeriod", "period");
             String imageUrl = (competition != null) ? nullToEmpty(competition.getRepresentativeImageUrl()) : readText(node, "representativeImageUrl", "imageUrl", "image_url");
 
