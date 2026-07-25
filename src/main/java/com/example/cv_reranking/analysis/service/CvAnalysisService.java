@@ -11,6 +11,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
+import com.example.cv_reranking.recommendation.dto.CompetitionRecommendationResponse;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -115,11 +116,29 @@ public class CvAnalysisService {
                 toAnalysisScores(record.getWeaknesses())
         );
 
+        List<CvAnalyzeResponse.RecommendedCompetition> recommendations =
+                recommendationService.getMyCompetitionRecommendations(loginUserId)
+                        .stream()
+                        .map(rec -> new CvAnalyzeResponse.RecommendedCompetition(
+                                rec.competitionId(),
+                                rec.dlContestId(),
+                                rec.title(),
+                                rec.score(),
+                                rec.domainScore(),
+                                rec.skillScore(),
+                                rec.category(),
+                                rec.applicationTarget(),
+                                rec.organizer(),
+                                rec.applicationPeriod(),
+                                rec.representativeImageUrl()
+                        ))
+                        .toList();
+
         return new CvAnalyzeResponse(
                 loginUserId,
                 record.getExtractedName(),
                 cvAnalysis,
-                List.of()
+                recommendations
         );
     }
 
