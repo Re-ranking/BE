@@ -11,7 +11,6 @@ import com.fasterxml.jackson.databind.JsonNode;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
-import com.example.cv_reranking.recommendation.dto.CompetitionRecommendationResponse;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -208,23 +207,44 @@ public class CvAnalysisService {
 
         recommendationNodes.forEach(node -> {
             Long dlContestId = readLong(node, "contest_id", "contestId", "dlContestId");
+            String fallbackTitle = readText(node, "title", "name", "contestName");
 
-            Competition competition = dlContestId == null
-                    ? null
-                    : competitionRepository.findByDlContestId(dlContestId).orElse(null);
+            // 1차 조회: DL이 넘겨준 dlContestId로 DB의 dl_contest_id 컬럼 조회
+            Competition competition = (dlContestId != null)
+                    ? competitionRepository.findByDlContestId(dlContestId).orElse(null)
+                    : null;
+
+            // 2차 조회: 실패 시, dlContestId가 DB의 PK(id)일 가능성을 고려해 PK로 조회
+            if (competition == null && dlContestId != null) {
+                competition = competitionRepository.findById(dlContestId).orElse(null);
+            }
+
+            // 3차 조회: DL의 dl_contest_id와 DB의 dl_contest_id가 맞지 않는 문제(예: 3 vs 11) 해결을 위해 공모전 이름으로 조회
+            if (competition == null && !fallbackTitle.isBlank()) {
+                competition = competitionRepository.findByName(fallbackTitle).orElse(null);
+            }
+
+            // 최종 추천 객체 매핑
+            Long finalCompetitionId = (competition != null) ? competition.getId() : null;
+            String finalTitle = (competition != null) ? competition.getName() : fallbackTitle;
+            String category = (competition != null) ? nullToEmpty(competition.getCategory()) : readText(node, "category");
+            String applicationTarget = (competition != null) ? nullToEmpty(competition.getApplicationTarget()) : readText(node, "applicationTarget", "target");
+            String organizer = (competition != null) ? nullToEmpty(competition.getOrganizer()) : readText(node, "organizer");
+            String applicationPeriod = (competition != null) ? nullToEmpty(competition.getApplicationPeriod()) : readText(node, "applicationPeriod", "period");
+            String imageUrl = (competition != null) ? nullToEmpty(competition.getRepresentativeImageUrl()) : readText(node, "representativeImageUrl", "imageUrl", "image_url");
 
             recommendations.add(new CvAnalyzeResponse.RecommendedCompetition(
-                    competition != null ? competition.getId() : null,
+                    finalCompetitionId,
                     dlContestId,
-                    competition != null ? competition.getName() : readText(node, "title", "name", "contestName"),
+                    finalTitle,
                     toPercent(readDouble(node, "final_score", "finalScore", "score")),
                     toPercent(readDouble(node, "domain_score", "domainScore")),
                     toPercent(readDouble(node, "skill_score", "skillScore")),
-                    competition != null ? nullToEmpty(competition.getCategory()) : "",
-                    competition != null ? nullToEmpty(competition.getApplicationTarget()) : "",
-                    competition != null ? nullToEmpty(competition.getOrganizer()) : "",
-                    competition != null ? nullToEmpty(competition.getApplicationPeriod()) : "",
-                    competition != null ? nullToEmpty(competition.getRepresentativeImageUrl()) : ""
+                    category,
+                    applicationTarget,
+                    organizer,
+                    applicationPeriod,
+                    imageUrl
             ));
         });
 
